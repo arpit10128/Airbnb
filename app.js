@@ -50,7 +50,7 @@ app.get("/listings/new", (req, res) => {
 
 // Create route
 app.post("/listings", wrapAsync(async (req, res, next) => {
-    let result = listingSchema.validate(req.body);
+    let result = listingSchema.validate(req.body.listing);
     console.log(result);
        let newListing = new Listing(req.body.listing);
     await newListing.save();
