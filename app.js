@@ -1,22 +1,22 @@
 const express = require("express");
 const app = express();
 const mongoose = require("mongoose");
-const Listing = require("./models/listing");
 const path = require("path");
 const methodOverride = require('method-override');
 const ejsMate = require("ejs-mate");
-const wrapAsync = require("./utils/wrapAsync.js");
 const ExpressError = require("./utils/ExpressError.js");
-const {listingSchema} = require("./schema.js");
+const cookieParser = require('cookie-parser');
+const session = require("express-session");
+const flash = require('connect-flash');
+const passport = require("passport");
+const LocalStrategy = require("passport-local");
+const User = require("./models/user.js");
+
+const listingRouter = require("./routes/listing.js");
+const reviewRouter = require("./routes/review.js");
+const userRouter = require("./routes/user.js");
 
 const MONGO_URL = "mongodb://127.0.0.1:27017/wanderlust";
-
-app.set("view engine", "ejs");
-app.set("views", path.join(__dirname, "views"));
-app.use(express.urlencoded({ extended: true }));
-app.use(methodOverride('_method'));
-app.engine("ejs", ejsMate);
-app.use(express.static(path.join(__dirname,"/public")));
 
 main()
     .then((res) => {
@@ -29,80 +29,53 @@ async function main() {
     await mongoose.connect(MONGO_URL);
 }
 
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "views"));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(methodOverride('_method'));
+app.engine("ejs", ejsMate);
+app.use(express.static(path.join(__dirname,"/public")));
+app.use(cookieParser("secretcode"));
+
+const sessionOptions = {
+    secret: "secretcode",
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+        expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        httpOnly: true,
+    }
+};
+
 
 // Root route
 app.get("/", (req, res) => {
     res.send("root is working");
 });
 
+app.use(session(sessionOptions));
+app.use(flash());
 
-// index route
-app.get("/listings", wrapAsync(async (req, res) => {
-    let allListings = await Listing.find({});
-    res.render("listings/index.ejs", { allListings });
-}));
+app.use(passport.initialize());
+app.use(passport.session());
+passport.use( new LocalStrategy(User.authenticate()) );
+
+// use static serialize and deserialize of model for passport session support
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
 
 
-// New route
-app.get("/listings/new", (req, res) => {
-    res.render("listings/new.ejs");
+app.use((req, res, next) => {
+    res.locals.success = req.flash("success");
+    res.locals.error = req.flash("error");
+    next();
 });
 
-// Create route
-app.post("/listings", wrapAsync(async (req, res, next) => {
-    let result = listingSchema.validate(req.body.listing);
-    console.log(result);
-       let newListing = new Listing(req.body.listing);
-    await newListing.save();
-    res.redirect("/listings");
-  }));
-
-// show route
-app.get("/listings/:id", wrapAsync(async (req, res) => {
-    let { id } = req.params;
-    const listing = await Listing.findById(id);
-    res.render("listings/show.ejs", { listing });
-}));
-
-
-// Edit route
-app.get("/listings/:id/edit", wrapAsync(async (req, res) => {
-    let { id } = req.params;
-    const listing = await Listing.findById(id);
-    res.render("listings/edit.ejs", { listing });
-}));
-
-// Update route
-app.patch("/listings/:id", wrapAsync(async (req, res) => {
-    let { id } = req.params;
-    await Listing.findByIdAndUpdate(id, { ...req.body.listing });
-    res.redirect(`/listings/${id}`); // Redirect to updated listing page
-  }));
-
-
-// Delete route
-app.delete("/listings/:id", wrapAsync(async (req, res) => {
-    let { id } = req.params;
-    let deletedlisting = await Listing.findByIdAndDelete(id);
-    console.log(deletedlisting);
-    res.redirect("/listings");
-}));
-
-
-// app.get("/testlisting", async(req,res) => {
-//     let sampleListing = new Listing({
-//         title:"my new villa",
-//         description: "mountain views",
-//         price: 1200,
-//         location: "goa",
-//         country: "india",
-//     });
-
-//    await sampleListing.save();
-//    console.log("sample was saved");
-//    res.send("successful test");
-// })
-
+app.use("/listings", listingRouter);
+app.use("/listings/:id/reviews", reviewRouter);
+app.use("/", userRouter);
 
 // For unidentified routes
 app.all("*", (req, res, next) => {

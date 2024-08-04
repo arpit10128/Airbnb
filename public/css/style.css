@@ -49,12 +49,12 @@ body{
     text-decoration: underline;
 }
 .f-btm{
-    position: relative;
-    bottom: 0px;
+    margin-bottom: 0px;
     width: 100%;
 }
+
 /* cards */
-.card{
+.listing-card{
     border: none !important;
     margin-bottom: 2rem;
 }
